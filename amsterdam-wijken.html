@@ -302,6 +302,14 @@
             return normalized.charAt(0).toUpperCase() + normalized.slice(1);
         }
 
+        // Exacte vergelijking van stadsdeelnamen (voorkomt "West" match met "Nieuw-West")
+        function sameStadsdeel(a, b) {
+            return normalizeStadsdeelName(a).toLowerCase() === normalizeStadsdeelName(b).toLowerCase();
+        }
+
+        // Set van stadsdelen die daadwerkelijk op de kaart staan
+        let availableStadsdelen = new Set();
+
         // ============================================
         // LEAFLET KAART
         // ============================================
@@ -522,6 +530,13 @@
                 }
             }).addTo(map);
 
+            // Vul de set van beschikbare stadsdelen (voor quiz filtering)
+            availableStadsdelen = new Set();
+            stadsdeelLayer.eachLayer(l => {
+                if (l._stadsdeelName) availableStadsdelen.add(l._stadsdeelName);
+            });
+            console.log('Beschikbare stadsdelen op kaart:', [...availableStadsdelen]);
+
             loadingStatus.textContent = 'Klaar';
         }
 
@@ -703,6 +718,10 @@
         function buildPools() {
             const pools = {};
             for (const item of allPostcodes) {
+                // Filter: alleen stadsdelen die op de kaart staan
+                if (availableStadsdelen.size > 0 && !availableStadsdelen.has(item.g)) {
+                    continue;
+                }
                 (pools[item.g] ||= []).push(item.pc);
             }
             return pools;
@@ -713,6 +732,8 @@
             pcServed = 0;
             lastG = null;
             streak = 0;
+            // Update pcTotal op basis van gefilterde pools
+            pcTotal = poolsRemaining();
         }
 
         function poolsRemaining() {
@@ -832,7 +853,7 @@
         function handleQuizClick(clickedName, layer) {
             if (!currentQuestion) return;
 
-            const correct = clickedName.toLowerCase().includes(currentQuestion.g.toLowerCase());
+            const correct = sameStadsdeel(clickedName, currentQuestion.g);
 
             if (correct) {
                 layer.setStyle({
