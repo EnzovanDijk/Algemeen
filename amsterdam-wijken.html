@@ -405,12 +405,10 @@
         // ============================================
         async function loadPC4Gebieden() {
             try {
-                // Bouw CQL filter voor alleen Amsterdam postcodes
-                const postcodeFilters = allPostcodes.map(pc => `postcode4='${pc}'`).join(' OR ');
-                const cqlFilter = encodeURIComponent(postcodeFilters);
-
-                // PDOK CBS PC4 service met filter
-                const url = `https://service.pdok.nl/cbs/postcode4/wfs/v1_0?service=WFS&version=2.0.0&request=GetFeature&typeName=postcode4:postcode4&outputFormat=json&srsName=EPSG:4326&CQL_FILTER=${cqlFilter}`;
+                // PDOK CBS PC4 service - bbox voor Amsterdam + Weesp regio
+                // bbox format: minx,miny,maxx,maxy (ruim genomen voor heel Amsterdam incl Weesp)
+                const bbox = '4.7,52.2,5.15,52.5';
+                const url = `https://service.pdok.nl/cbs/postcode4/wfs/v1_0?service=WFS&version=2.0.0&request=GetFeature&typeName=postcode4:postcode4&outputFormat=json&srsName=EPSG:4326&bbox=${bbox},EPSG:4326`;
 
                 console.log('Laden PC4 gebieden...');
                 const response = await fetch(url);
@@ -432,7 +430,6 @@
 
                 // Filter alleen de postcodes die in onze ranges vallen
                 const filteredFeatures = data.features.filter(feature => {
-                    // Probeer verschillende property namen
                     const props = feature.properties || {};
                     const pc4String = props.postcode4 || props.pc4 || props.PC4 || props.postcode || '';
                     const pc4 = parseInt(pc4String);
