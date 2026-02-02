@@ -639,33 +639,30 @@
                 if (pc4Loaded && pc4Loaded.length > 0) {
                     const feature = pc4Loaded.find(f => getPC4FromFeature(f) === postcode);
                     if (feature) {
+                        console.log('PC4 gevonden in cache:', postcode);
                         showPC4Highlight(feature);
                         return;
                     }
+                    console.log('PC4 niet in cache:', postcode, '- probeer API');
                 }
 
-                // Anders ophalen via API met filter
-                const url = `${PC4_ENDPOINT}&filter=postcode4='${postcode}'&limit=1`;
-                console.log('PC4 highlight URL:', url);
-                const response = await fetch(url);
-                if (!response.ok) {
-                    console.log('PC4 filter failed, trying bbox approach');
-                    // Fallback: gebruik bbox rond Amsterdam centrum
-                    const bboxUrl = `${PC4_ENDPOINT}&bbox=4.7,52.2,5.1,52.5&limit=500`;
-                    const bboxResponse = await fetch(bboxUrl);
-                    if (!bboxResponse.ok) return;
-                    const bboxData = await bboxResponse.json();
-                    const feature = bboxData.features?.find(f => getPC4FromFeature(f) === postcode);
-                    if (feature) {
-                        showPC4Highlight(feature);
-                    }
+                // Fallback: ophalen via API met grotere bbox
+                const bboxUrl = `${PC4_ENDPOINT}&bbox=4.6,52.15,5.2,52.55&limit=2000`;
+                const bboxResponse = await fetch(bboxUrl);
+                if (!bboxResponse.ok) {
+                    console.log('PC4 API request failed');
                     return;
                 }
-
-                const geojson = await response.json();
-                if (!geojson.features || geojson.features.length === 0) return;
-
-                showPC4Highlight(geojson.features[0]);
+                const bboxData = await bboxResponse.json();
+                const feature = bboxData.features?.find(f => getPC4FromFeature(f) === postcode);
+                if (feature) {
+                    console.log('PC4 gevonden via API:', postcode);
+                    showPC4Highlight(feature);
+                    // Voeg toe aan cache voor volgende keer
+                    pc4Loaded.push(feature);
+                } else {
+                    console.log('PC4 niet gevonden:', postcode);
+                }
 
             } catch (err) {
                 console.error('PC4 highlight fout:', err);
@@ -769,31 +766,40 @@
 
         // Preload PC4 data voor quiz highlights
         async function preloadPC4Data() {
-            if (pc4Loaded && pc4Loaded.length > 0) return; // Al geladen
+            if (pc4Loaded && pc4Loaded.length > 0) return true; // Al geladen
 
             try {
                 loadingStatus.textContent = 'PC4 data laden...';
-                const bbox = '4.7,52.2,5.15,52.5'; // Amsterdam + Weesp
+                // Grotere bbox voor Amsterdam + Weesp + omgeving
+                const bbox = '4.6,52.15,5.2,52.55';
                 const url = `${PC4_ENDPOINT}&bbox=${encodeURIComponent(bbox)}&limit=2000`;
                 const response = await fetch(url);
-                if (!response.ok) return;
+                if (!response.ok) return false;
 
                 const geojson = await response.json();
                 const features = Array.isArray(geojson.features) ? geojson.features : [];
 
-                // Filter op Amsterdam
+                // Filter: binnen Amsterdam OF in onze postcode ranges
                 pc4Loaded = features.filter(f => {
                     const pc4 = getPC4FromFeature(f);
                     if (!pc4) return false;
+
+                    // Check of postcode in onze ranges zit
+                    const pcNum = parseInt(pc4);
+                    if (stadsdeelByPostcode[pcNum]) return true;
+
+                    // Of geografisch binnen Amsterdam
                     const centroid = centroidOfFeature(f);
                     return centroid ? pointInAmsterdam(centroid) : false;
                 });
 
                 loadingStatus.textContent = 'Klaar';
                 console.log('PC4 preload klaar:', pc4Loaded.length, 'gebieden');
+                return true;
             } catch (err) {
                 console.error('PC4 preload fout:', err);
                 loadingStatus.textContent = 'Klaar';
+                return false;
             }
         }
 
@@ -806,8 +812,10 @@
             clearQuizHighlight();
             menuOverlay.classList.add('hidden');
 
-            // Laad PC4 data op achtergrond voor highlights
-            preloadPC4Data();
+            // Wacht op PC4 data voordat we beginnen
+            showFeedback('PC4 gebieden laden...', '#666');
+            await preloadPC4Data();
+
             nextQuestion();
         }
 
