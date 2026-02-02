@@ -319,6 +319,7 @@
         // Amsterdam masker (voor filtering PC4)
         let amsterdamPolys = [];
         let amsterdamBounds = null;
+        let stadsdeelPolygons = []; // Array van { name, rings } voor geografische lookup
 
         // ============================================
         // APP STATE
@@ -375,14 +376,19 @@
 
         function buildAmsterdamMask(geojson) {
             amsterdamPolys = [];
+            stadsdeelPolygons = [];
             amsterdamBounds = L.latLngBounds();
 
             const feats = (geojson && geojson.features) ? geojson.features : [];
             for (const f of feats) {
+                const rawName = (f.properties && (f.properties.naam || f.properties.name)) || '';
+                const name = normalizeStadsdeelName(rawName);
                 const rings = extractOuterRings(f.geometry);
+
                 for (const ring of rings) {
                     if (!Array.isArray(ring) || ring.length < 3) continue;
                     amsterdamPolys.push(ring);
+                    stadsdeelPolygons.push({ name, ring });
 
                     for (const pt of ring) {
                         const lon = pt[0], lat = pt[1];
@@ -414,6 +420,14 @@
                 if (pointInRing(pt, ring)) return true;
             }
             return false;
+        }
+
+        // Bepaal in welk stadsdeel een punt geografisch valt
+        function getStadsdeelForPoint(pt) {
+            for (const { name, ring } of stadsdeelPolygons) {
+                if (pointInRing(pt, ring)) return name;
+            }
+            return 'Onbekend';
         }
 
         function centroidOfFeature(feature) {
@@ -554,8 +568,9 @@
             // Maak nieuwe layer
             pc4Layer = L.geoJSON({ type: 'FeatureCollection', features: amsterdamFeatures }, {
                 style: function(feature) {
-                    const pc4 = getPC4FromFeature(feature) || '?';
-                    const stadsdeel = getStadsdeelFromPC4(pc4);
+                    // Bepaal stadsdeel op basis van geografische locatie (niet postcode range)
+                    const centroid = centroidOfFeature(feature);
+                    const stadsdeel = centroid ? getStadsdeelForPoint(centroid) : 'Onbekend';
                     return {
                         color: '#333',
                         weight: 1.5,
@@ -565,7 +580,9 @@
                 },
                 onEachFeature: function(feature, layer) {
                     const pc4 = getPC4FromFeature(feature) || '?';
-                    const stadsdeel = getStadsdeelFromPC4(pc4);
+                    // Bepaal stadsdeel op basis van geografische locatie
+                    const centroid = centroidOfFeature(feature);
+                    const stadsdeel = centroid ? getStadsdeelForPoint(centroid) : 'Onbekend';
                     layer._stadsdeel = stadsdeel; // Bewaar voor later
 
                     layer.bindTooltip(`<strong>${pc4}</strong><br><small>${stadsdeel}</small>`, { sticky: true });
