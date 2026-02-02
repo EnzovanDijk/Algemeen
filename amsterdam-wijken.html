@@ -312,6 +312,10 @@
             attribution: '© OpenStreetMap, © CARTO'
         }).addTo(map);
 
+        // Custom pane voor PC4 highlight (altijd bovenop)
+        map.createPane('highlightPane');
+        map.getPane('highlightPane').style.zIndex = 650;
+
         let stadsdeelLayer = null;
         let pc4Layer = null;
         let pc4Loaded = [];
@@ -672,15 +676,14 @@
             clearQuizHighlight();
 
             quizHighlightLayer = L.geoJSON(feature, {
+                pane: 'highlightPane', // Gebruik custom pane zodat het bovenop komt
                 style: {
-                    color: '#ffeb3b',
+                    color: '#ffd600',
                     weight: 4,
                     fillColor: '#ffeb3b',
-                    fillOpacity: 0.6
+                    fillOpacity: 0.7
                 }
             }).addTo(map);
-
-            quizHighlightLayer.bringToFront();
         }
 
         function resetStadsdeelStyles() {
