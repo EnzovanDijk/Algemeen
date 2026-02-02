@@ -212,6 +212,11 @@
         .leaflet-tooltip-top:before {
             border-top-color: rgba(0,0,0,0.8);
         }
+
+        /* Verwijder focus outline bij klikken */
+        .leaflet-interactive:focus {
+            outline: none;
+        }
     </style>
 </head>
 <body>
@@ -310,6 +315,7 @@
 
         let geoJsonLayer = null;
         let stadsdelenData = {}; // Mapping: normalized name -> layer
+        let pc4Layer = null; // Layer voor postcodegebieden
 
         // Kleuren voor stadsdelen
         const stadsdeelColors = {
@@ -391,6 +397,73 @@
             } catch (error) {
                 console.error('Fout bij laden stadsdelen:', error);
                 showFeedback('Fout bij laden kaartdata. Probeer te verversen.', 'wrong');
+            }
+        }
+
+        // ============================================
+        // LAAD PC4 GEBIEDEN
+        // ============================================
+        async function loadPC4Gebieden() {
+            try {
+                // Bounding box voor Amsterdam regio
+                const bbox = '4.7,52.2,5.1,52.5,EPSG:4326';
+                const url = `https://service.pdok.nl/cbs/postcode4/wfs/v1_0?service=WFS&version=2.0.0&request=GetFeature&typeName=postcode4:postcode4&outputFormat=json&bbox=${bbox}`;
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                // Filter alleen de postcodes die in onze ranges vallen
+                const filteredFeatures = data.features.filter(feature => {
+                    const pc4 = parseInt(feature.properties.postcode4);
+                    return stadsdeelByPostcode.hasOwnProperty(pc4);
+                });
+
+                const filteredData = {
+                    type: 'FeatureCollection',
+                    features: filteredFeatures
+                };
+
+                pc4Layer = L.geoJSON(filteredData, {
+                    style: function(feature) {
+                        const pc4 = parseInt(feature.properties.postcode4);
+                        const stadsdeel = stadsdeelByPostcode[pc4];
+                        return {
+                            fillColor: stadsdeelColors[stadsdeel] || '#999',
+                            weight: 2,
+                            opacity: 1,
+                            color: '#333',
+                            fillOpacity: 0.3
+                        };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        const pc4 = feature.properties.postcode4;
+                        const stadsdeel = stadsdeelByPostcode[parseInt(pc4)] || 'Onbekend';
+
+                        layer.bindTooltip(`${pc4}<br><small>${stadsdeel}</small>`, {
+                            permanent: false,
+                            direction: 'top'
+                        });
+                    }
+                });
+
+                // Start verborgen
+                // pc4Layer wordt pas toegevoegd bij Ontdekken modus
+
+            } catch (error) {
+                console.error('Fout bij laden PC4 gebieden:', error);
+            }
+        }
+
+        function showPC4Layer() {
+            if (pc4Layer && !map.hasLayer(pc4Layer)) {
+                pc4Layer.addTo(map);
+                pc4Layer.bringToFront();
+            }
+        }
+
+        function hidePC4Layer() {
+            if (pc4Layer && map.hasLayer(pc4Layer)) {
+                map.removeLayer(pc4Layer);
             }
         }
 
@@ -502,6 +575,7 @@
             quizState.lastTwoStadsdelen = [];
             refillPostcodeBag();
             resetAllStyles();
+            hidePC4Layer();
             nextQuestion();
         }
 
@@ -563,10 +637,11 @@
             exploreState.selectedStadsdeel = null;
             exploreState.selectedLayer = null;
             resetAllStyles();
+            showPC4Layer();
 
             targetText.textContent = 'Ontdekken';
-            subInfo.textContent = 'Klik op een stadsdeel voor info';
-            showFeedback('Klik op een stadsdeel om de postcodes te zien', 'info');
+            subInfo.textContent = 'Bekijk de postcodegebieden';
+            showFeedback('De kaart toont alle PC4 postcodegebieden per stadsdeel', 'info');
         }
 
         function handleExploreClick(clickedStadsdeel, layer) {
@@ -635,6 +710,7 @@
         document.getElementById('menu-btn').addEventListener('click', () => {
             currentMode = null;
             resetAllStyles();
+            hidePC4Layer();
             exploreState.selectedStadsdeel = null;
             exploreState.selectedLayer = null;
             quizState.answered = false;
@@ -650,6 +726,7 @@
         // INITIALISATIE
         // ============================================
         loadStadsdelen();
+        loadPC4Gebieden();
     </script>
 </body>
 </html>
