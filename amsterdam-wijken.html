@@ -405,18 +405,46 @@
         // ============================================
         async function loadPC4Gebieden() {
             try {
-                // Bounding box voor Amsterdam regio
-                const bbox = '4.7,52.2,5.1,52.5,EPSG:4326';
-                const url = `https://service.pdok.nl/cbs/postcode4/wfs/v1_0?service=WFS&version=2.0.0&request=GetFeature&typeName=postcode4:postcode4&outputFormat=json&bbox=${bbox}`;
+                // Bouw CQL filter voor alleen Amsterdam postcodes
+                const postcodeFilters = allPostcodes.map(pc => `postcode4='${pc}'`).join(' OR ');
+                const cqlFilter = encodeURIComponent(postcodeFilters);
 
+                // PDOK CBS PC4 service met filter
+                const url = `https://service.pdok.nl/cbs/postcode4/wfs/v1_0?service=WFS&version=2.0.0&request=GetFeature&typeName=postcode4:postcode4&outputFormat=json&srsName=EPSG:4326&CQL_FILTER=${cqlFilter}`;
+
+                console.log('Laden PC4 gebieden...');
                 const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
                 const data = await response.json();
+                console.log('PC4 data geladen, aantal features:', data.features?.length);
+
+                if (!data.features || data.features.length === 0) {
+                    console.warn('Geen PC4 features gevonden');
+                    return;
+                }
+
+                // Log eerste feature om structuur te bekijken
+                console.log('Voorbeeld feature:', data.features[0]);
 
                 // Filter alleen de postcodes die in onze ranges vallen
                 const filteredFeatures = data.features.filter(feature => {
-                    const pc4 = parseInt(feature.properties.postcode4);
+                    // Probeer verschillende property namen
+                    const props = feature.properties || {};
+                    const pc4String = props.postcode4 || props.pc4 || props.PC4 || props.postcode || '';
+                    const pc4 = parseInt(pc4String);
                     return stadsdeelByPostcode.hasOwnProperty(pc4);
                 });
+
+                console.log('Gefilterde PC4 features voor Amsterdam:', filteredFeatures.length);
+
+                if (filteredFeatures.length === 0) {
+                    console.warn('Geen Amsterdam postcodes gevonden in PC4 data');
+                    return;
+                }
 
                 const filteredData = {
                     type: 'FeatureCollection',
@@ -425,7 +453,9 @@
 
                 pc4Layer = L.geoJSON(filteredData, {
                     style: function(feature) {
-                        const pc4 = parseInt(feature.properties.postcode4);
+                        const props = feature.properties || {};
+                        const pc4String = props.postcode4 || props.pc4 || props.PC4 || props.postcode || '';
+                        const pc4 = parseInt(pc4String);
                         const stadsdeel = stadsdeelByPostcode[pc4];
                         return {
                             fillColor: stadsdeelColors[stadsdeel] || '#999',
@@ -436,7 +466,8 @@
                         };
                     },
                     onEachFeature: function(feature, layer) {
-                        const pc4 = feature.properties.postcode4;
+                        const props = feature.properties || {};
+                        const pc4 = props.postcode4 || props.pc4 || props.PC4 || props.postcode || 'Onbekend';
                         const stadsdeel = stadsdeelByPostcode[parseInt(pc4)] || 'Onbekend';
 
                         layer.bindTooltip(`${pc4}<br><small>${stadsdeel}</small>`, {
@@ -446,8 +477,7 @@
                     }
                 });
 
-                // Start verborgen
-                // pc4Layer wordt pas toegevoegd bij Ontdekken modus
+                console.log('PC4 layer succesvol aangemaakt');
 
             } catch (error) {
                 console.error('Fout bij laden PC4 gebieden:', error);
