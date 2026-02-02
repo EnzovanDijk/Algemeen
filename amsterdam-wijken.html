@@ -103,24 +103,6 @@
             transition: all 0.3s;
         }
 
-        #feedback.correct {
-            background: #c8e6c9;
-            color: #2e7d32;
-            border: 2px solid #4caf50;
-        }
-
-        #feedback.wrong {
-            background: #ffcdd2;
-            color: #c62828;
-            border: 2px solid #f44336;
-        }
-
-        #feedback.info {
-            background: #e3f2fd;
-            color: #1565c0;
-            border: 2px solid #2196f3;
-        }
-
         #feedback.hidden {
             opacity: 0;
             pointer-events: none;
@@ -177,23 +159,23 @@
             transition: all 0.2s;
         }
 
-        .menu-option:first-of-type {
+        .menu-option:nth-of-type(1) {
             background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
             color: white;
         }
 
-        .menu-option:first-of-type:hover {
+        .menu-option:nth-of-type(1):hover {
             background: linear-gradient(135deg, #43a047 0%, #4caf50 100%);
             transform: translateY(-2px);
             box-shadow: 0 5px 20px rgba(76, 175, 80, 0.4);
         }
 
-        .menu-option:last-of-type {
+        .menu-option:nth-of-type(2) {
             background: linear-gradient(135deg, #2196f3 0%, #42a5f5 100%);
             color: white;
         }
 
-        .menu-option:last-of-type:hover {
+        .menu-option:nth-of-type(2):hover {
             background: linear-gradient(135deg, #1e88e5 0%, #2196f3 100%);
             transform: translateY(-2px);
             box-shadow: 0 5px 20px rgba(33, 150, 243, 0.4);
@@ -217,6 +199,17 @@
         .leaflet-interactive:focus {
             outline: none;
         }
+
+        #loading-status {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255,255,255,0.9);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
@@ -233,15 +226,16 @@
 
     <div id="map-container">
         <div id="map"></div>
-        <div id="feedback" class="hidden">Klik op een stadsdeel</div>
+        <div id="feedback">Laden...</div>
+        <div id="loading-status">Laden...</div>
     </div>
 
-    <div id="menu-overlay">
+    <div id="menu-overlay" class="hidden">
         <div id="menu-content">
-            <h1>🏙️ Amsterdamse Stadsdelen</h1>
+            <h1>Amsterdamse Stadsdelen</h1>
             <p>Leer de stadsdelen en postcodes van Amsterdam</p>
             <button class="menu-option" id="start-quiz">A) Quiz: Postcode → Stadsdeel</button>
-            <button class="menu-option" id="start-explore">B) Ontdekken</button>
+            <button class="menu-option" id="start-explore">B) Ontdekken (PC4 gebieden)</button>
         </div>
     </div>
 
@@ -251,57 +245,44 @@
         // ============================================
         const includeWeesp = true;
 
-        const postcodeRanges = {
-            'Centrum': [1011, 1019],
-            'Noord': [1020, 1039],
-            'Westpoort': [1040, 1049],
-            'West': [1050, 1059],
-            'Nieuw-West': [1060, 1069],
-            'Zuid': [1070, 1089],
-            'Oost': [1090, 1099],
-            'Zuidoost': [1100, 1109],
-        };
+        const RANGES = [
+            { g: "Centrum",     from: 1011, to: 1019 },
+            { g: "Noord",       from: 1020, to: 1039 },
+            { g: "Westpoort",   from: 1040, to: 1049 },
+            { g: "West",        from: 1050, to: 1059 },
+            { g: "Nieuw-West",  from: 1060, to: 1069 },
+            { g: "Zuid",        from: 1070, to: 1089 },
+            { g: "Oost",        from: 1090, to: 1099 },
+            { g: "Zuidoost",    from: 1100, to: 1109 },
+            { g: "Weesp",       from: 1380, to: 1384, optional: true }
+        ];
 
-        if (includeWeesp) {
-            postcodeRanges['Weesp'] = [1380, 1384];
-        }
-
-        // Genereer alle postcodes per stadsdeel
+        // Genereer alle postcodes
         const postcodesByStadsdeel = {};
         const stadsdeelByPostcode = {};
+        const allPostcodes = [];
 
-        for (const [stadsdeel, [start, end]] of Object.entries(postcodeRanges)) {
-            postcodesByStadsdeel[stadsdeel] = [];
-            for (let pc = start; pc <= end; pc++) {
-                postcodesByStadsdeel[stadsdeel].push(pc);
-                stadsdeelByPostcode[pc] = stadsdeel;
+        for (const r of RANGES) {
+            if (r.optional && !includeWeesp) continue;
+            postcodesByStadsdeel[r.g] = [];
+            for (let pc = r.from; pc <= r.to; pc++) {
+                postcodesByStadsdeel[r.g].push(pc);
+                stadsdeelByPostcode[pc] = r.g;
+                allPostcodes.push({ pc: String(pc), g: r.g });
             }
         }
-
-        // Alle postcodes in één array
-        const allPostcodes = Object.keys(stadsdeelByPostcode).map(Number);
 
         // ============================================
         // NAAM NORMALISATIE
         // ============================================
         function normalizeStadsdeelName(name) {
-            if (!name) return '';
-            let normalized = name.trim();
-            // Strip "stadsdeel " of "gebied " aan het begin (case-insensitive)
+            if (!name) return 'Onbekend';
+            let normalized = String(name).trim();
             normalized = normalized.replace(/^(stadsdeel|gebied)\s+/i, '');
-            // Normaliseer dubbele spaties
             normalized = normalized.replace(/\s+/g, ' ').trim();
-            // Specifieke mappings
-            const lower = normalized.toLowerCase();
-            if (lower === 'nieuw west' || lower === 'nieuw-west') {
-                return 'Nieuw-West';
-            }
-            if (lower === 'zuidoost' || lower === 'zuid oost' || lower === 'zuid-oost') {
-                return 'Zuidoost';
-            }
-            // Capitalize eerste letter
-            return normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase()
-                .replace(/-(\w)/g, (m, c) => '-' + c.toUpperCase());
+            if (/^nieuw.?west$/i.test(normalized)) return 'Nieuw-West';
+            if (/^zuidoost$/i.test(normalized)) return 'Zuidoost';
+            return normalized.charAt(0).toUpperCase() + normalized.slice(1);
         }
 
         // ============================================
@@ -309,227 +290,46 @@
         // ============================================
         const map = L.map('map').setView([52.367, 4.904], 11);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap, © CARTO'
         }).addTo(map);
 
-        let geoJsonLayer = null;
-        let stadsdelenData = {}; // Mapping: normalized name -> layer
-        let pc4Layer = null; // Layer voor postcodegebieden
+        let stadsdeelLayer = null;
+        let pc4Layer = null;
+        let pc4Loaded = [];
 
-        // Kleuren voor stadsdelen
-        const stadsdeelColors = {
-            'Centrum': '#e91e63',
-            'Noord': '#9c27b0',
-            'Westpoort': '#673ab7',
-            'West': '#3f51b5',
-            'Nieuw-West': '#2196f3',
-            'Zuid': '#009688',
-            'Oost': '#ff9800',
-            'Zuidoost': '#795548',
-            'Weesp': '#607d8b'
-        };
-
-        function getDefaultStyle(normalizedName) {
-            return {
-                fillColor: stadsdeelColors[normalizedName] || '#999',
-                weight: 2,
-                opacity: 1,
-                color: 'white',
-                fillOpacity: 0.5
-            };
-        }
-
-        // ============================================
-        // LAAD GEOJSON
-        // ============================================
-        async function loadStadsdelen() {
-            try {
-                const response = await fetch('https://api.data.amsterdam.nl/v1/gebieden/stadsdelen?_format=geojson');
-                const data = await response.json();
-
-                geoJsonLayer = L.geoJSON(data, {
-                    style: function(feature) {
-                        const name = feature.properties.naam || feature.properties.name || '';
-                        const normalizedName = normalizeStadsdeelName(name);
-                        return getDefaultStyle(normalizedName);
-                    },
-                    onEachFeature: function(feature, layer) {
-                        const name = feature.properties.naam || feature.properties.name || '';
-                        const normalizedName = normalizeStadsdeelName(name);
-
-                        // Sla layer op voor later gebruik
-                        stadsdelenData[normalizedName] = layer;
-
-                        // Tooltip
-                        layer.bindTooltip(normalizedName, {
-                            permanent: false,
-                            direction: 'top',
-                            className: 'stadsdeel-tooltip'
-                        });
-
-                        // Click handler
-                        layer.on('click', function(e) {
-                            L.DomEvent.stopPropagation(e);
-                            handleStadsdeelClick(normalizedName, layer);
-                        });
-
-                        // Hover effect
-                        layer.on('mouseover', function() {
-                            if (currentMode !== 'quiz' || !quizState.answered) {
-                                layer.setStyle({ fillOpacity: 0.7 });
-                            }
-                        });
-
-                        layer.on('mouseout', function() {
-                            if (currentMode === 'quiz' && quizState.highlightedLayer === layer) {
-                                return; // Keep highlight during quiz feedback
-                            }
-                            if (currentMode === 'explore' && exploreState.selectedLayer === layer) {
-                                return; // Keep highlight in explore mode
-                            }
-                            const style = getDefaultStyle(normalizedName);
-                            layer.setStyle({ fillOpacity: style.fillOpacity });
-                        });
-                    }
-                }).addTo(map);
-
-            } catch (error) {
-                console.error('Fout bij laden stadsdelen:', error);
-                showFeedback('Fout bij laden kaartdata. Probeer te verversen.', 'wrong');
-            }
-        }
-
-        // ============================================
-        // LAAD PC4 GEBIEDEN
-        // ============================================
-        async function loadPC4Gebieden() {
-            try {
-                // PDOK CBS PC4 service - bbox voor Amsterdam + Weesp regio
-                // bbox format: minx,miny,maxx,maxy (ruim genomen voor heel Amsterdam incl Weesp)
-                const bbox = '4.7,52.2,5.15,52.5';
-                const url = `https://service.pdok.nl/cbs/postcode4/wfs/v1_0?service=WFS&version=2.0.0&request=GetFeature&typeName=postcode4:postcode4&outputFormat=json&srsName=EPSG:4326&bbox=${bbox},EPSG:4326`;
-
-                console.log('Laden PC4 gebieden...');
-                const response = await fetch(url);
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                const data = await response.json();
-                console.log('PC4 data geladen, aantal features:', data.features?.length);
-
-                if (!data.features || data.features.length === 0) {
-                    console.warn('Geen PC4 features gevonden');
-                    return;
-                }
-
-                // Log eerste feature om structuur te bekijken
-                console.log('Voorbeeld feature:', data.features[0]);
-
-                // Filter alleen de postcodes die in onze ranges vallen
-                const filteredFeatures = data.features.filter(feature => {
-                    const props = feature.properties || {};
-                    const pc4String = props.postcode4 || props.pc4 || props.PC4 || props.postcode || '';
-                    const pc4 = parseInt(pc4String);
-                    return stadsdeelByPostcode.hasOwnProperty(pc4);
-                });
-
-                console.log('Gefilterde PC4 features voor Amsterdam:', filteredFeatures.length);
-
-                if (filteredFeatures.length === 0) {
-                    console.warn('Geen Amsterdam postcodes gevonden in PC4 data');
-                    return;
-                }
-
-                const filteredData = {
-                    type: 'FeatureCollection',
-                    features: filteredFeatures
-                };
-
-                pc4Layer = L.geoJSON(filteredData, {
-                    style: function(feature) {
-                        const props = feature.properties || {};
-                        const pc4String = props.postcode4 || props.pc4 || props.PC4 || props.postcode || '';
-                        const pc4 = parseInt(pc4String);
-                        const stadsdeel = stadsdeelByPostcode[pc4];
-                        return {
-                            fillColor: stadsdeelColors[stadsdeel] || '#999',
-                            weight: 2,
-                            opacity: 1,
-                            color: '#333',
-                            fillOpacity: 0.3
-                        };
-                    },
-                    onEachFeature: function(feature, layer) {
-                        const props = feature.properties || {};
-                        const pc4 = props.postcode4 || props.pc4 || props.PC4 || props.postcode || 'Onbekend';
-                        const stadsdeel = stadsdeelByPostcode[parseInt(pc4)] || 'Onbekend';
-
-                        layer.bindTooltip(`${pc4}<br><small>${stadsdeel}</small>`, {
-                            permanent: false,
-                            direction: 'top'
-                        });
-                    }
-                });
-
-                console.log('PC4 layer succesvol aangemaakt');
-
-            } catch (error) {
-                console.error('Fout bij laden PC4 gebieden:', error);
-            }
-        }
-
-        function showPC4Layer() {
-            if (pc4Layer && !map.hasLayer(pc4Layer)) {
-                pc4Layer.addTo(map);
-                pc4Layer.bringToFront();
-            }
-        }
-
-        function hidePC4Layer() {
-            if (pc4Layer && map.hasLayer(pc4Layer)) {
-                map.removeLayer(pc4Layer);
-            }
-        }
+        // Amsterdam masker (voor filtering PC4)
+        let amsterdamPolys = [];
+        let amsterdamBounds = null;
 
         // ============================================
         // APP STATE
         // ============================================
         let currentMode = null; // 'quiz' of 'explore'
         let score = 0;
+        let currentQuestion = null;
 
-        const quizState = {
-            currentPostcode: null,
-            correctStadsdeel: null,
-            answered: false,
-            highlightedLayer: null,
-            lastTwoStadsdelen: [],
-            postcodeBag: [] // Pool voor postcode-uniform randomness
-        };
-
-        const exploreState = {
-            selectedStadsdeel: null,
-            selectedLayer: null
-        };
+        // Quiz bag systeem
+        let pcPools = {};
+        let pcTotal = allPostcodes.length;
+        let pcServed = 0;
+        let lastG = null;
+        let streak = 0;
 
         // ============================================
-        // UI HELPERS
+        // UI ELEMENTS
         // ============================================
         const targetText = document.getElementById('target-text');
         const subInfo = document.getElementById('sub-info');
         const scoreDisplay = document.getElementById('score');
         const feedbackEl = document.getElementById('feedback');
         const menuOverlay = document.getElementById('menu-overlay');
+        const loadingStatus = document.getElementById('loading-status');
 
-        function showFeedback(text, type = 'info') {
+        function showFeedback(text, color = '#333') {
             feedbackEl.textContent = text;
-            feedbackEl.className = type;
-        }
-
-        function hideFeedback() {
-            feedbackEl.className = 'hidden';
+            feedbackEl.style.color = color;
         }
 
         function updateScore(newScore) {
@@ -537,12 +337,253 @@
             scoreDisplay.textContent = score;
         }
 
-        function resetAllStyles() {
-            if (geoJsonLayer) {
-                geoJsonLayer.eachLayer(layer => {
-                    const name = layer.feature.properties.naam || layer.feature.properties.name || '';
-                    const normalizedName = normalizeStadsdeelName(name);
-                    layer.setStyle(getDefaultStyle(normalizedName));
+        // ============================================
+        // AMSTERDAM MASKER (voor PC4 filtering)
+        // ============================================
+        function extractOuterRings(geom) {
+            if (!geom) return [];
+            const t = geom.type;
+            const c = geom.coordinates;
+            const out = [];
+
+            if (t === "Polygon" && Array.isArray(c) && c.length > 0) {
+                out.push(c[0]);
+            } else if (t === "MultiPolygon" && Array.isArray(c)) {
+                for (const poly of c) {
+                    if (Array.isArray(poly) && poly.length > 0) out.push(poly[0]);
+                }
+            }
+            return out;
+        }
+
+        function buildAmsterdamMask(geojson) {
+            amsterdamPolys = [];
+            amsterdamBounds = L.latLngBounds();
+
+            const feats = (geojson && geojson.features) ? geojson.features : [];
+            for (const f of feats) {
+                const rings = extractOuterRings(f.geometry);
+                for (const ring of rings) {
+                    if (!Array.isArray(ring) || ring.length < 3) continue;
+                    amsterdamPolys.push(ring);
+
+                    for (const pt of ring) {
+                        const lon = pt[0], lat = pt[1];
+                        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                            amsterdamBounds.extend([lat, lon]);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Point-in-polygon (ray casting)
+        function pointInRing(pt, ring) {
+            const x = pt[0], y = pt[1];
+            let inside = false;
+            for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+                const xi = ring[i][0], yi = ring[i][1];
+                const xj = ring[j][0], yj = ring[j][1];
+                const intersect = ((yi > y) !== (yj > y)) &&
+                    (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-12) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        function pointInAmsterdam(pt) {
+            if (amsterdamBounds && !amsterdamBounds.contains([pt[1], pt[0]])) return false;
+            for (const ring of amsterdamPolys) {
+                if (pointInRing(pt, ring)) return true;
+            }
+            return false;
+        }
+
+        function centroidOfFeature(feature) {
+            const rings = extractOuterRings(feature && feature.geometry);
+            if (!rings.length) return null;
+            const ring = rings[0];
+            let sx = 0, sy = 0, n = 0;
+            for (const p of ring) {
+                if (!p || p.length < 2) continue;
+                sx += p[0];
+                sy += p[1];
+                n++;
+            }
+            if (n === 0) return null;
+            return [sx / n, sy / n];
+        }
+
+        // ============================================
+        // PC4 HELPERS
+        // ============================================
+        function getPC4FromFeature(feature) {
+            const p = (feature && feature.properties) ? feature.properties : {};
+            const candidates = ['postcode4', 'pc4', 'postcode', 'pc', 'code'];
+            for (const k of candidates) {
+                if (p[k] != null) return String(p[k]).trim();
+            }
+            return null;
+        }
+
+        function getStadsdeelFromPC4(pc4) {
+            const num = parseInt(pc4);
+            return stadsdeelByPostcode[num] || 'Onbekend';
+        }
+
+        // ============================================
+        // LAAD STADSDELEN
+        // ============================================
+        async function loadStadsdelen() {
+            loadingStatus.textContent = 'Stadsdelen laden...';
+
+            const response = await fetch('https://api.data.amsterdam.nl/v1/gebieden/stadsdelen?_format=geojson');
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+
+            // Bouw Amsterdam masker
+            buildAmsterdamMask(data);
+
+            stadsdeelLayer = L.geoJSON(data, {
+                style: {
+                    color: 'rgba(40,45,55,0.55)',
+                    weight: 1.5,
+                    fillColor: 'rgba(80,140,255,0.4)',
+                    fillOpacity: 0.15
+                },
+                onEachFeature: function(feature, layer) {
+                    const rawName = feature.properties.naam || feature.properties.name || '';
+                    const name = normalizeStadsdeelName(rawName);
+
+                    layer.bindTooltip(name, { sticky: true });
+
+                    layer.on('click', function() {
+                        if (currentMode === 'quiz') {
+                            handleQuizClick(name, layer);
+                        }
+                    });
+
+                    layer.on('mouseover', function() {
+                        if (currentMode !== 'explore') {
+                            layer.setStyle({ fillOpacity: 0.3 });
+                        }
+                    });
+
+                    layer.on('mouseout', function() {
+                        if (currentMode !== 'explore') {
+                            const c = layer.options.fillColor;
+                            if (c === 'rgba(80,140,255,0.4)') {
+                                layer.setStyle({ fillOpacity: 0.15 });
+                            }
+                        }
+                    });
+                }
+            }).addTo(map);
+
+            loadingStatus.textContent = 'Klaar';
+        }
+
+        // ============================================
+        // LAAD PC4 GEBIEDEN (OGC API Features)
+        // ============================================
+        const PC4_ENDPOINT = 'https://api.pdok.nl/cbs/postcode4/ogc/v1/collections/postcode4/items?f=json';
+
+        async function loadPC4Gebieden() {
+            if (!amsterdamPolys.length) {
+                showFeedback('Amsterdam-grens nog niet geladen, even wachten...', '#666');
+                return;
+            }
+
+            const zoom = map.getZoom();
+            if (zoom < 10) {
+                showFeedback('Zoom iets in om PC4 gebieden te laden', '#666');
+                return;
+            }
+
+            loadingStatus.textContent = 'PC4 gebieden laden...';
+            showFeedback('PC4 gebieden laden...', '#666');
+
+            const bounds = map.getBounds();
+            const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+            const url = `${PC4_ENDPOINT}&bbox=${encodeURIComponent(bbox)}&limit=2000`;
+
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const geojson = await response.json();
+
+            const features = Array.isArray(geojson.features) ? geojson.features : [];
+
+            // Filter: alleen met PC4 en binnen Amsterdam
+            const amsterdamFeatures = features.filter(f => {
+                const pc4 = getPC4FromFeature(f);
+                if (!pc4) return false;
+                const centroid = centroidOfFeature(f);
+                return centroid ? pointInAmsterdam(centroid) : false;
+            });
+
+            pc4Loaded = amsterdamFeatures;
+
+            // Verwijder oude layer
+            if (pc4Layer) {
+                map.removeLayer(pc4Layer);
+            }
+
+            // Maak nieuwe layer
+            pc4Layer = L.geoJSON({ type: 'FeatureCollection', features: amsterdamFeatures }, {
+                style: {
+                    color: 'rgba(20,24,30,0.6)',
+                    weight: 1.2,
+                    fillColor: 'rgba(80,140,255,0.4)',
+                    fillOpacity: 0.15
+                },
+                onEachFeature: function(feature, layer) {
+                    const pc4 = getPC4FromFeature(feature) || '?';
+                    const stadsdeel = getStadsdeelFromPC4(pc4);
+
+                    layer.bindTooltip(`<strong>${pc4}</strong><br><small>${stadsdeel}</small>`, { sticky: true });
+
+                    layer.on('mouseover', function() {
+                        layer.setStyle({ fillOpacity: 0.35 });
+                    });
+
+                    layer.on('mouseout', function() {
+                        layer.setStyle({ fillOpacity: 0.15 });
+                    });
+                }
+            }).addTo(map);
+
+            // Maak stadsdelen subtiel in explore mode
+            if (stadsdeelLayer) {
+                stadsdeelLayer.eachLayer(l => {
+                    l.setStyle({
+                        color: 'rgba(0,0,0,0)',
+                        weight: 0,
+                        fillOpacity: 0.05
+                    });
+                });
+            }
+
+            loadingStatus.textContent = `PC4: ${amsterdamFeatures.length} gebieden`;
+            showFeedback(`${amsterdamFeatures.length} PC4 gebieden geladen. Hover voor details.`, '#1565c0');
+        }
+
+        function clearPC4Layer() {
+            if (pc4Layer) {
+                map.removeLayer(pc4Layer);
+                pc4Layer = null;
+            }
+            pc4Loaded = [];
+        }
+
+        function resetStadsdeelStyles() {
+            if (stadsdeelLayer) {
+                stadsdeelLayer.eachLayer(l => {
+                    l.setStyle({
+                        color: 'rgba(40,45,55,0.55)',
+                        weight: 1.5,
+                        fillColor: 'rgba(80,140,255,0.4)',
+                        fillOpacity: 0.15
+                    });
                 });
             }
         }
@@ -550,210 +591,188 @@
         // ============================================
         // QUIZ LOGICA
         // ============================================
-        function refillPostcodeBag() {
-            quizState.postcodeBag = [...allPostcodes];
-            // Shuffle
-            for (let i = quizState.postcodeBag.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [quizState.postcodeBag[i], quizState.postcodeBag[j]] =
-                [quizState.postcodeBag[j], quizState.postcodeBag[i]];
+        function buildPools() {
+            const pools = {};
+            for (const item of allPostcodes) {
+                (pools[item.g] ||= []).push(item.pc);
             }
+            return pools;
         }
 
-        function getNextPostcode() {
-            // Refill bag als leeg
-            if (quizState.postcodeBag.length === 0) {
-                refillPostcodeBag();
+        function refillPools() {
+            pcPools = buildPools();
+            pcServed = 0;
+            lastG = null;
+            streak = 0;
+        }
+
+        function poolsRemaining() {
+            let total = 0;
+            for (const g in pcPools) total += pcPools[g].length;
+            return total;
+        }
+
+        function pickNextPostcode() {
+            if (poolsRemaining() === 0) refillPools();
+
+            const candidates = Object.keys(pcPools).filter(g => pcPools[g].length > 0);
+            if (candidates.length === 0) {
+                refillPools();
+                return pickNextPostcode();
             }
 
-            // Filter postcodes die niet leiden tot 3x hetzelfde stadsdeel
-            let validPostcodes = quizState.postcodeBag.filter(pc => {
-                const stadsdeel = stadsdeelByPostcode[pc];
-                // Als laatste 2 hetzelfde zijn, mag deze niet ook hetzelfde zijn
-                if (quizState.lastTwoStadsdelen.length === 2 &&
-                    quizState.lastTwoStadsdelen[0] === quizState.lastTwoStadsdelen[1] &&
-                    quizState.lastTwoStadsdelen[0] === stadsdeel) {
-                    return false;
-                }
-                return true;
-            });
-
-            // Als alle valide postcodes gefilterd zijn, neem gewoon willekeurige
-            if (validPostcodes.length === 0) {
-                validPostcodes = [...quizState.postcodeBag];
+            // Voorkom 3x zelfde stadsdeel
+            let eligible = candidates;
+            if (streak >= 2 && lastG && candidates.length > 1) {
+                eligible = candidates.filter(g => g !== lastG);
+                if (eligible.length === 0) eligible = candidates;
             }
 
-            // Kies random uit valide postcodes (gewogen naar stadsdeel grootte via bag)
-            const randomIndex = Math.floor(Math.random() * validPostcodes.length);
-            const chosenPostcode = validPostcodes[randomIndex];
+            // Gewogen random (meer postcodes = grotere kans)
+            let total = 0;
+            for (const g of eligible) total += pcPools[g].length;
 
-            // Verwijder uit bag
-            const bagIndex = quizState.postcodeBag.indexOf(chosenPostcode);
-            if (bagIndex > -1) {
-                quizState.postcodeBag.splice(bagIndex, 1);
+            let r = Math.floor(Math.random() * total);
+            let chosenG = eligible[eligible.length - 1];
+            for (const g of eligible) {
+                r -= pcPools[g].length;
+                if (r < 0) { chosenG = g; break; }
             }
 
-            return chosenPostcode;
+            const arr = pcPools[chosenG];
+            const idx = Math.floor(Math.random() * arr.length);
+            const pc = arr[idx];
+
+            // Verwijder uit pool
+            arr[idx] = arr[arr.length - 1];
+            arr.pop();
+
+            // Update streak
+            if (chosenG === lastG) streak++;
+            else { lastG = chosenG; streak = 1; }
+
+            pcServed++;
+            return { pc, g: chosenG };
         }
 
         function startQuiz() {
             currentMode = 'quiz';
             updateScore(0);
-            quizState.lastTwoStadsdelen = [];
-            refillPostcodeBag();
-            resetAllStyles();
-            hidePC4Layer();
+            refillPools();
+            resetStadsdeelStyles();
+            clearPC4Layer();
+            menuOverlay.classList.add('hidden');
             nextQuestion();
         }
 
         function nextQuestion() {
-            quizState.answered = false;
-            quizState.highlightedLayer = null;
-            resetAllStyles();
+            currentQuestion = pickNextPostcode();
+            resetStadsdeelStyles();
 
-            const postcode = getNextPostcode();
-            quizState.currentPostcode = postcode;
-            quizState.correctStadsdeel = stadsdeelByPostcode[postcode];
-
-            targetText.textContent = `Postcode: ${postcode}`;
-            subInfo.textContent = 'Klik op het juiste stadsdeel';
-            showFeedback('Klik op het stadsdeel waar deze postcode bij hoort', 'info');
+            targetText.textContent = `Postcode: ${currentQuestion.pc}`;
+            subInfo.textContent = `(${pcServed}/${pcTotal})`;
+            showFeedback(`In welk stadsdeel ligt ${currentQuestion.pc}?`, '#333');
         }
 
-        function handleQuizClick(clickedStadsdeel, layer) {
-            if (quizState.answered) return;
+        function handleQuizClick(clickedName, layer) {
+            if (!currentQuestion) return;
 
-            quizState.answered = true;
-            quizState.highlightedLayer = layer;
+            const correct = clickedName.toLowerCase().includes(currentQuestion.g.toLowerCase());
 
-            // Update laatste twee stadsdelen
-            quizState.lastTwoStadsdelen.push(quizState.correctStadsdeel);
-            if (quizState.lastTwoStadsdelen.length > 2) {
-                quizState.lastTwoStadsdelen.shift();
-            }
-
-            if (clickedStadsdeel === quizState.correctStadsdeel) {
-                // Correct!
+            if (correct) {
+                layer.setStyle({
+                    fillColor: 'rgba(46,204,113,0.95)',
+                    fillOpacity: 0.25,
+                    color: 'rgba(46,204,113,0.95)',
+                    weight: 2
+                });
+                showFeedback(`Correct! ${clickedName}`, 'rgb(19,120,66)');
                 updateScore(score + 1);
-                layer.setStyle({ fillColor: '#4caf50', fillOpacity: 0.8 });
-                showFeedback('Correct! ✓', 'correct');
-                subInfo.textContent = `${clickedStadsdeel} is juist!`;
-
-                setTimeout(() => {
-                    nextQuestion();
-                }, 850);
+                setTimeout(nextQuestion, 850);
             } else {
-                // Fout
-                layer.setStyle({ fillColor: '#f44336', fillOpacity: 0.8 });
-                showFeedback(`Fout, dit is ${clickedStadsdeel}`, 'wrong');
-                subInfo.textContent = `Het juiste antwoord was: ${quizState.correctStadsdeel}`;
-
-                // Reset na kort moment zodat gebruiker kan zien wat fout was
-                setTimeout(() => {
-                    quizState.answered = false;
-                    quizState.highlightedLayer = null;
-                }, 1500);
+                layer.setStyle({
+                    fillColor: 'rgba(231,76,60,0.95)',
+                    fillOpacity: 0.25,
+                    color: 'rgba(231,76,60,0.95)',
+                    weight: 2
+                });
+                showFeedback(`Fout, dit is ${clickedName}. Juist was: ${currentQuestion.g}`, 'rgb(160,42,32)');
             }
         }
 
         // ============================================
-        // ONTDEKKEN LOGICA
+        // ONTDEKKEN MODUS
         // ============================================
+        let exploreHandler = null;
+
         function startExplore() {
             currentMode = 'explore';
-            exploreState.selectedStadsdeel = null;
-            exploreState.selectedLayer = null;
-            resetAllStyles();
-            showPC4Layer();
+            menuOverlay.classList.add('hidden');
 
             targetText.textContent = 'Ontdekken';
-            subInfo.textContent = 'Bekijk de postcodegebieden';
-            showFeedback('De kaart toont alle PC4 postcodegebieden per stadsdeel', 'info');
-        }
+            subInfo.textContent = 'PC4 postcodegebieden';
 
-        function handleExploreClick(clickedStadsdeel, layer) {
-            // Toggle: als zelfde stadsdeel nogmaals geklikt, reset
-            if (exploreState.selectedStadsdeel === clickedStadsdeel) {
-                resetAllStyles();
-                exploreState.selectedStadsdeel = null;
-                exploreState.selectedLayer = null;
-                targetText.textContent = 'Vrij';
-                subInfo.textContent = 'Klik op een stadsdeel voor info';
-                showFeedback('Klik op een stadsdeel om de postcodes te zien', 'info');
-                return;
+            // Focus op Amsterdam
+            if (amsterdamBounds && amsterdamBounds.isValid()) {
+                map.fitBounds(amsterdamBounds.pad(0.05));
             }
 
-            // Reset vorige selectie
-            if (exploreState.selectedLayer) {
-                const prevName = exploreState.selectedStadsdeel;
-                exploreState.selectedLayer.setStyle(getDefaultStyle(prevName));
-            }
+            // Laad PC4
+            loadPC4Gebieden().catch(err => {
+                console.error('PC4 laden mislukt:', err);
+                showFeedback('PC4 laden mislukt. Zie console (F12).', 'rgb(160,42,32)');
+            });
 
-            // Highlight nieuwe selectie
-            exploreState.selectedStadsdeel = clickedStadsdeel;
-            exploreState.selectedLayer = layer;
-            layer.setStyle({ fillColor: '#ffeb3b', fillOpacity: 0.8, weight: 3 });
-
-            // Toon info
-            const postcodes = postcodesByStadsdeel[clickedStadsdeel] || [];
-            const range = postcodes.length > 0
-                ? `${postcodes[0]}–${postcodes[postcodes.length - 1]}`
-                : 'Onbekend';
-
-            targetText.textContent = clickedStadsdeel;
-            subInfo.textContent = `Range: ${range}`;
-
-            // Toon eerste 18 postcodes
-            const displayPostcodes = postcodes.slice(0, 18).join(', ');
-            const moreText = postcodes.length > 18 ? '...' : '';
-            showFeedback(`Postcodes (oplopend): ${displayPostcodes}${moreText}`, 'info');
+            // Herlaad bij pan/zoom
+            if (exploreHandler) map.off('moveend', exploreHandler);
+            exploreHandler = function() {
+                if (currentMode === 'explore') {
+                    loadPC4Gebieden().catch(console.error);
+                }
+            };
+            map.on('moveend', exploreHandler);
         }
 
         // ============================================
-        // CENTRAL CLICK HANDLER
+        // MENU
         // ============================================
-        function handleStadsdeelClick(normalizedName, layer) {
-            if (currentMode === 'quiz') {
-                handleQuizClick(normalizedName, layer);
-            } else if (currentMode === 'explore') {
-                handleExploreClick(normalizedName, layer);
-            }
-            // Als geen mode actief, doe niets (menu is open)
-        }
-
-        // ============================================
-        // MENU HANDLERS
-        // ============================================
-        document.getElementById('start-quiz').addEventListener('click', () => {
-            menuOverlay.classList.add('hidden');
-            startQuiz();
-        });
-
-        document.getElementById('start-explore').addEventListener('click', () => {
-            menuOverlay.classList.add('hidden');
-            startExplore();
-        });
-
-        document.getElementById('menu-btn').addEventListener('click', () => {
+        function showMenu() {
             currentMode = null;
-            resetAllStyles();
-            hidePC4Layer();
-            exploreState.selectedStadsdeel = null;
-            exploreState.selectedLayer = null;
-            quizState.answered = false;
-            quizState.highlightedLayer = null;
+            currentQuestion = null;
+            resetStadsdeelStyles();
+            clearPC4Layer();
+
+            if (exploreHandler) {
+                map.off('moveend', exploreHandler);
+                exploreHandler = null;
+            }
 
             targetText.textContent = 'Welkom';
-            subInfo.textContent = 'Kies een module om te beginnen';
-            hideFeedback();
+            subInfo.textContent = 'Kies een module';
+            showFeedback('Kies een module om te starten', '#333');
             menuOverlay.classList.remove('hidden');
-        });
+        }
+
+        // ============================================
+        // EVENT HANDLERS
+        // ============================================
+        document.getElementById('start-quiz').addEventListener('click', startQuiz);
+        document.getElementById('start-explore').addEventListener('click', startExplore);
+        document.getElementById('menu-btn').addEventListener('click', showMenu);
 
         // ============================================
         // INITIALISATIE
         // ============================================
-        loadStadsdelen();
-        loadPC4Gebieden();
+        (async function boot() {
+            try {
+                await loadStadsdelen();
+                showMenu();
+            } catch (err) {
+                console.error('Laden mislukt:', err);
+                loadingStatus.textContent = 'Fout!';
+                showFeedback('Data laden mislukt. Zie console (F12).', 'rgb(160,42,32)');
+            }
+        })();
     </script>
 </body>
 </html>
