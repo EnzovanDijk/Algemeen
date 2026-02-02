@@ -272,6 +272,23 @@
             }
         }
 
+        // Kleuren per stadsdeel
+        const stadsdeelColors = {
+            'Centrum': '#e91e63',
+            'Noord': '#9c27b0',
+            'Westpoort': '#673ab7',
+            'West': '#3f51b5',
+            'Nieuw-West': '#2196f3',
+            'Zuid': '#009688',
+            'Oost': '#ff9800',
+            'Zuidoost': '#795548',
+            'Weesp': '#607d8b'
+        };
+
+        function getStadsdeelColor(name) {
+            return stadsdeelColors[name] || '#999';
+        }
+
         // ============================================
         // NAAM NORMALISATIE
         // ============================================
@@ -445,15 +462,20 @@
             buildAmsterdamMask(data);
 
             stadsdeelLayer = L.geoJSON(data, {
-                style: {
-                    color: 'rgba(40,45,55,0.55)',
-                    weight: 1.5,
-                    fillColor: 'rgba(80,140,255,0.4)',
-                    fillOpacity: 0.15
+                style: function(feature) {
+                    const rawName = feature.properties.naam || feature.properties.name || '';
+                    const name = normalizeStadsdeelName(rawName);
+                    return {
+                        color: 'white',
+                        weight: 2,
+                        fillColor: getStadsdeelColor(name),
+                        fillOpacity: 0.5
+                    };
                 },
                 onEachFeature: function(feature, layer) {
                     const rawName = feature.properties.naam || feature.properties.name || '';
                     const name = normalizeStadsdeelName(rawName);
+                    layer._stadsdeelName = name; // Bewaar voor later
 
                     layer.bindTooltip(name, { sticky: true });
 
@@ -465,15 +487,16 @@
 
                     layer.on('mouseover', function() {
                         if (currentMode !== 'explore') {
-                            layer.setStyle({ fillOpacity: 0.3 });
+                            layer.setStyle({ fillOpacity: 0.7 });
                         }
                     });
 
                     layer.on('mouseout', function() {
                         if (currentMode !== 'explore') {
-                            const c = layer.options.fillColor;
-                            if (c === 'rgba(80,140,255,0.4)') {
-                                layer.setStyle({ fillOpacity: 0.15 });
+                            // Reset naar stadsdeel kleur
+                            const baseColor = getStadsdeelColor(name);
+                            if (layer.options.fillColor === baseColor) {
+                                layer.setStyle({ fillOpacity: 0.5 });
                             }
                         }
                     });
@@ -530,24 +553,29 @@
 
             // Maak nieuwe layer
             pc4Layer = L.geoJSON({ type: 'FeatureCollection', features: amsterdamFeatures }, {
-                style: {
-                    color: 'rgba(20,24,30,0.6)',
-                    weight: 1.2,
-                    fillColor: 'rgba(80,140,255,0.4)',
-                    fillOpacity: 0.15
+                style: function(feature) {
+                    const pc4 = getPC4FromFeature(feature) || '?';
+                    const stadsdeel = getStadsdeelFromPC4(pc4);
+                    return {
+                        color: '#333',
+                        weight: 1.5,
+                        fillColor: getStadsdeelColor(stadsdeel),
+                        fillOpacity: 0.4
+                    };
                 },
                 onEachFeature: function(feature, layer) {
                     const pc4 = getPC4FromFeature(feature) || '?';
                     const stadsdeel = getStadsdeelFromPC4(pc4);
+                    layer._stadsdeel = stadsdeel; // Bewaar voor later
 
                     layer.bindTooltip(`<strong>${pc4}</strong><br><small>${stadsdeel}</small>`, { sticky: true });
 
                     layer.on('mouseover', function() {
-                        layer.setStyle({ fillOpacity: 0.35 });
+                        layer.setStyle({ fillOpacity: 0.65 });
                     });
 
                     layer.on('mouseout', function() {
-                        layer.setStyle({ fillOpacity: 0.15 });
+                        layer.setStyle({ fillOpacity: 0.4 });
                     });
                 }
             }).addTo(map);
@@ -578,11 +606,12 @@
         function resetStadsdeelStyles() {
             if (stadsdeelLayer) {
                 stadsdeelLayer.eachLayer(l => {
+                    const name = l._stadsdeelName || 'Onbekend';
                     l.setStyle({
-                        color: 'rgba(40,45,55,0.55)',
-                        weight: 1.5,
-                        fillColor: 'rgba(80,140,255,0.4)',
-                        fillOpacity: 0.15
+                        color: 'white',
+                        weight: 2,
+                        fillColor: getStadsdeelColor(name),
+                        fillOpacity: 0.5
                     });
                 });
             }
