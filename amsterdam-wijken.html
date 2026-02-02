@@ -315,6 +315,7 @@
         let stadsdeelLayer = null;
         let pc4Layer = null;
         let pc4Loaded = [];
+        let quizHighlightLayer = null; // Voor PC4 highlight in quiz
 
         // Amsterdam masker (voor filtering PC4)
         let amsterdamPolys = [];
@@ -573,9 +574,9 @@
                     const stadsdeel = centroid ? getStadsdeelForPoint(centroid) : 'Onbekend';
                     return {
                         color: '#333',
-                        weight: 1.5,
+                        weight: 1.2,
                         fillColor: getStadsdeelColor(stadsdeel),
-                        fillOpacity: 0.4
+                        fillOpacity: 0.25
                     };
                 },
                 onEachFeature: function(feature, layer) {
@@ -588,11 +589,11 @@
                     layer.bindTooltip(`<strong>${pc4}</strong><br><small>${stadsdeel}</small>`, { sticky: true });
 
                     layer.on('mouseover', function() {
-                        layer.setStyle({ fillOpacity: 0.65 });
+                        layer.setStyle({ fillOpacity: 0.45 });
                     });
 
                     layer.on('mouseout', function() {
-                        layer.setStyle({ fillOpacity: 0.4 });
+                        layer.setStyle({ fillOpacity: 0.25 });
                     });
                 }
             }).addTo(map);
@@ -618,6 +619,44 @@
                 pc4Layer = null;
             }
             pc4Loaded = [];
+        }
+
+        function clearQuizHighlight() {
+            if (quizHighlightLayer) {
+                map.removeLayer(quizHighlightLayer);
+                quizHighlightLayer = null;
+            }
+        }
+
+        // Haal een specifiek PC4 gebied op en highlight het
+        async function highlightPC4ForPostcode(postcode) {
+            try {
+                const url = `${PC4_ENDPOINT}&postcode4=${postcode}&limit=1`;
+                const response = await fetch(url);
+                if (!response.ok) return;
+
+                const geojson = await response.json();
+                if (!geojson.features || geojson.features.length === 0) return;
+
+                const feature = geojson.features[0];
+
+                clearQuizHighlight();
+
+                quizHighlightLayer = L.geoJSON(feature, {
+                    style: {
+                        color: '#ffeb3b',
+                        weight: 3,
+                        fillColor: '#ffeb3b',
+                        fillOpacity: 0.5
+                    }
+                }).addTo(map);
+
+                // Breng naar voren
+                quizHighlightLayer.bringToFront();
+
+            } catch (err) {
+                console.error('PC4 highlight fout:', err);
+            }
         }
 
         function resetStadsdeelStyles() {
@@ -707,6 +746,7 @@
             refillPools();
             resetStadsdeelStyles();
             clearPC4Layer();
+            clearQuizHighlight();
             menuOverlay.classList.add('hidden');
             nextQuestion();
         }
@@ -714,6 +754,7 @@
         function nextQuestion() {
             currentQuestion = pickNextPostcode();
             resetStadsdeelStyles();
+            clearQuizHighlight();
 
             targetText.textContent = `Postcode: ${currentQuestion.pc}`;
             subInfo.textContent = `(${pcServed}/${pcTotal})`;
@@ -734,7 +775,11 @@
                 });
                 showFeedback(`Correct! ${clickedName}`, 'rgb(19,120,66)');
                 updateScore(score + 1);
-                setTimeout(nextQuestion, 850);
+
+                // Highlight het PC4 gebied van de gevraagde postcode
+                highlightPC4ForPostcode(currentQuestion.pc);
+
+                setTimeout(nextQuestion, 1200); // Iets langer voor PC4 highlight
             } else {
                 layer.setStyle({
                     fillColor: 'rgba(231,76,60,0.95)',
@@ -787,6 +832,7 @@
             currentQuestion = null;
             resetStadsdeelStyles();
             clearPC4Layer();
+            clearQuizHighlight();
 
             if (exploreHandler) {
                 map.off('moveend', exploreHandler);
