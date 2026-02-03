@@ -1,52 +1,88 @@
 #!/usr/bin/env python3
 """
 Overzicht kantoordagen en afwezigheid
-Startdatum: mei 2025
+Startdatum: 14 mei 2025
+
+Gebruik:
+  1. Voeg afwezigheidsdagen toe aan afwezigheid.csv
+  2. Voer uit: python3 kantoordagen_overzicht.py
 """
 
+import csv
+import os
 from datetime import date, timedelta
 from collections import defaultdict
 
+# Pad naar dit script (voor relatieve paden)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+AFWEZIGHEID_CSV = os.path.join(SCRIPT_DIR, "afwezigheid.csv")
+
 # Nederlandse feestdagen 2025-2026
 FEESTDAGEN = {
-    date(2025, 5, 1): "Dag van de Arbeid",  # Niet altijd vrij in NL
+    # 2025
+    date(2025, 1, 1): "Nieuwjaarsdag",
+    date(2025, 4, 18): "Goede Vrijdag",
+    date(2025, 4, 20): "Eerste Paasdag",
+    date(2025, 4, 21): "Tweede Paasdag",
+    date(2025, 4, 27): "Koningsdag",
     date(2025, 5, 5): "Bevrijdingsdag",
     date(2025, 5, 29): "Hemelvaartsdag",
     date(2025, 6, 8): "Eerste Pinksterdag",
     date(2025, 6, 9): "Tweede Pinksterdag",
     date(2025, 12, 25): "Eerste Kerstdag",
     date(2025, 12, 26): "Tweede Kerstdag",
+    # 2026
     date(2026, 1, 1): "Nieuwjaarsdag",
+    date(2026, 4, 3): "Goede Vrijdag",
+    date(2026, 4, 5): "Eerste Paasdag",
+    date(2026, 4, 6): "Tweede Paasdag",
+    date(2026, 4, 27): "Koningsdag",
+    date(2026, 5, 5): "Bevrijdingsdag",
+    date(2026, 5, 14): "Hemelvaartsdag",
+    date(2026, 5, 24): "Eerste Pinksterdag",
+    date(2026, 5, 25): "Tweede Pinksterdag",
+    date(2026, 12, 25): "Eerste Kerstdag",
+    date(2026, 12, 26): "Tweede Kerstdag",
 }
 
-# Afwezigheidsdagen
-AFWEZIGHEID = {
-    date(2025, 8, 18): "Verlof (vakantie)",
-    date(2025, 8, 19): "Verlof (vakantie)",
-    date(2025, 8, 20): "Verlof (vakantie)",
-    date(2025, 8, 21): "Verlof (vakantie)",
-    date(2025, 8, 22): "Verlof (vakantie)",
-    date(2025, 9, 2): "Ziek",
-    date(2025, 9, 3): "Ziek",
-    date(2025, 9, 4): "Ziek",
-    date(2025, 10, 9): "Ziek",
-    date(2025, 10, 10): "Ziek",
-    date(2025, 11, 24): "Ziek",
-    date(2025, 11, 25): "Ziek",
-    date(2025, 11, 26): "Ziek",
-    date(2025, 12, 18): "Verlof (vakantie)",
-    date(2025, 12, 19): "Verlof (vakantie)",
-    date(2025, 12, 22): "Verlof (vakantie)",
-    date(2025, 12, 23): "Verlof (vakantie)",
-    date(2025, 12, 31): "Verlof (vakantie, halve dag 13:00-16:00)",
-    date(2026, 1, 22): "Ziek",
-    date(2026, 1, 23): "Ziek",
-    date(2026, 1, 26): "Ziek",
-}
+def laad_afwezigheid():
+    """Laad afwezigheidsdagen uit CSV bestand"""
+    afwezigheid = {}
 
-def is_werkdag(d):
-    """Check of een datum een werkdag is (ma-vr, geen feestdag)"""
-    return d.weekday() < 5 and d not in FEESTDAGEN
+    if not os.path.exists(AFWEZIGHEID_CSV):
+        print(f"Let op: {AFWEZIGHEID_CSV} niet gevonden. Maak dit bestand aan.")
+        return afwezigheid
+
+    with open(AFWEZIGHEID_CSV, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(
+            (row for row in f if not row.startswith('#')),
+            fieldnames=['datum', 'reden', 'opmerking']
+        )
+
+        for row in reader:
+            if row['datum'] == 'datum':  # Skip header
+                continue
+
+            try:
+                dag, maand, jaar = row['datum'].split('-')
+                d = date(int(jaar), int(maand), int(dag))
+
+                reden = row['reden'].strip().lower()
+                opmerking = row['opmerking'].strip() if row['opmerking'] else ""
+
+                if reden == 'verlof':
+                    label = f"Verlof ({opmerking})" if opmerking else "Verlof"
+                elif reden == 'ziek':
+                    label = f"Ziek ({opmerking})" if opmerking else "Ziek"
+                else:
+                    label = f"{reden.capitalize()} ({opmerking})" if opmerking else reden.capitalize()
+
+                afwezigheid[d] = label
+
+            except (ValueError, AttributeError) as e:
+                print(f"Waarschuwing: ongeldige regel overgeslagen: {row}")
+
+    return afwezigheid
 
 def get_weekday_name(d):
     """Geef Nederlandse dagnaam"""
@@ -55,13 +91,22 @@ def get_weekday_name(d):
 
 def bereken_overzicht():
     start_datum = date(2025, 5, 14)  # Eerste werkdag
-    eind_datum = date(2026, 1, 31)
+
+    # Einddatum: laatste dag van huidige maand
+    vandaag = date.today()
+    if vandaag.month == 12:
+        eind_datum = date(vandaag.year + 1, 1, 1) - timedelta(days=1)
+    else:
+        eind_datum = date(vandaag.year, vandaag.month + 1, 1) - timedelta(days=1)
 
     maand_namen = {
         1: "januari", 2: "februari", 3: "maart", 4: "april",
         5: "mei", 6: "juni", 7: "juli", 8: "augustus",
         9: "september", 10: "oktober", 11: "november", 12: "december"
     }
+
+    # Laad afwezigheid uit CSV
+    afwezigheid = laad_afwezigheid()
 
     resultaten = defaultdict(lambda: {
         "werkdagen_totaal": 0,
@@ -82,9 +127,9 @@ def bereken_overzicht():
             else:
                 resultaten[maand_key]["werkdagen_totaal"] += 1
 
-                if huidige_datum in AFWEZIGHEID:
+                if huidige_datum in afwezigheid:
                     resultaten[maand_key]["afwezigheid"].append(
-                        f"  {huidige_datum.day:2d}-{huidige_datum.month:02d} ({get_weekday_name(huidige_datum)}): {AFWEZIGHEID[huidige_datum]}"
+                        f"  {huidige_datum.day:2d}-{huidige_datum.month:02d} ({get_weekday_name(huidige_datum)}): {afwezigheid[huidige_datum]}"
                     )
                 else:
                     resultaten[maand_key]["kantoordagen"] += 1
@@ -94,7 +139,7 @@ def bereken_overzicht():
     # Print overzicht
     print("=" * 70)
     print("OVERZICHT KANTOORDAGEN EN AFWEZIGHEID")
-    print("Periode: mei 2025 - januari 2026")
+    print(f"Periode: {maand_namen[start_datum.month]} {start_datum.year} - {maand_namen[eind_datum.month]} {eind_datum.year}")
     print("=" * 70)
     print()
 
@@ -142,6 +187,7 @@ def bereken_overzicht():
     print(f"  Totaal ziek:           {totaal_ziek:3d} dagen")
     print()
     print("💡 Voor reiskostendeclaratie: gebruik het aantal KANTOORDAGEN per maand")
+    print(f"📝 Afwezigheid bijwerken: bewerk {AFWEZIGHEID_CSV}")
     print()
 
 if __name__ == "__main__":

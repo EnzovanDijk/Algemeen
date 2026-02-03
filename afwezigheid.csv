@@ -1,0 +1,28 @@
+# Afwezigheidsregistratie
+# Voeg nieuwe regels toe in het formaat: datum,reden,opmerking
+# Datum formaat: DD-MM-YYYY
+# Reden: verlof of ziek
+# Opmerking: optioneel
+#
+datum,reden,opmerking
+18-08-2025,verlof,vakantie
+19-08-2025,verlof,vakantie
+20-08-2025,verlof,vakantie
+21-08-2025,verlof,vakantie
+22-08-2025,verlof,vakantie
+02-09-2025,ziek,
+03-09-2025,ziek,
+04-09-2025,ziek,
+09-10-2025,ziek,
+10-10-2025,ziek,
+24-11-2025,ziek,
+25-11-2025,ziek,
+26-11-2025,ziek,
+18-12-2025,verlof,vakantie
+19-12-2025,verlof,vakantie
+22-12-2025,verlof,vakantie
+23-12-2025,verlof,vakantie
+31-12-2025,verlof,halve dag 13:00-16:00
+22-01-2026,ziek,
+23-01-2026,ziek,
+26-01-2026,ziek,
