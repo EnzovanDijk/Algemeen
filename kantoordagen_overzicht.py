@@ -39,9 +39,9 @@ AFWEZIGHEID = {
     date(2025, 12, 22): "Verlof (vakantie)",
     date(2025, 12, 23): "Verlof (vakantie)",
     date(2025, 12, 31): "Verlof (vakantie, halve dag 13:00-16:00)",
-    date(2026, 1, 21): "Ziek",
     date(2026, 1, 22): "Ziek",
     date(2026, 1, 23): "Ziek",
+    date(2026, 1, 26): "Ziek",
 }
 
 def is_werkdag(d):
