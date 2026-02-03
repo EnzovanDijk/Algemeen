@@ -31,7 +31,6 @@ AFWEZIGHEID = {
     date(2025, 9, 4): "Ziek",
     date(2025, 10, 9): "Ziek",
     date(2025, 10, 10): "Ziek",
-    date(2025, 10, 11): "Ziek",  # Zaterdag - telt niet
     date(2025, 11, 24): "Ziek",
     date(2025, 11, 25): "Ziek",
     date(2025, 11, 26): "Ziek",
@@ -40,10 +39,9 @@ AFWEZIGHEID = {
     date(2025, 12, 22): "Verlof (vakantie)",
     date(2025, 12, 23): "Verlof (vakantie)",
     date(2025, 12, 31): "Verlof (vakantie, halve dag 13:00-16:00)",
+    date(2026, 1, 21): "Ziek",
     date(2026, 1, 22): "Ziek",
     date(2026, 1, 23): "Ziek",
-    date(2026, 1, 24): "Ziek",
-    date(2026, 1, 25): "Ziek",  # Zaterdag - telt niet
 }
 
 def is_werkdag(d):
@@ -56,7 +54,7 @@ def get_weekday_name(d):
     return dagen[d.weekday()]
 
 def bereken_overzicht():
-    start_datum = date(2025, 5, 1)
+    start_datum = date(2025, 5, 14)  # Eerste werkdag
     eind_datum = date(2026, 1, 31)
 
     maand_namen = {
